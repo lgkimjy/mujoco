@@ -1143,6 +1143,14 @@ void MakeUiSections(mj::Simulate* sim, const mjModel* m, const mjData* d) {
 void AlignAndScaleView(mj::Simulate* sim, const mjModel* m) {
   // use default free camera parameters
   mjv_defaultFreeCamera(m, &sim->cam);
+  
+  /////////////////////////////////////////////////////////////////////
+  ////////////////////////////// JY CODE ////////////////////////////// 
+  sim->cam.distance = 1.3 * m->stat.extent;
+  sim->cam.type = mjCAMERA_TRACKING;
+  sim->cam.trackbodyid = 0;  
+  ////////////////////////////// JY CODE ////////////////////////////// 
+  /////////////////////////////////////////////////////////////////////
 }
 
 

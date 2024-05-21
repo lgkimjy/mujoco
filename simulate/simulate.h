@@ -168,10 +168,10 @@ class Simulate {
   int spacing = 0;
   int color = 0;
   int font = 0;
-  int ui0_enable = 1;
-  int ui1_enable = 1;
+  int ui0_enable = 0;
+  int ui1_enable = 0;
   int help = 0;
-  int info = 0;
+  int info = 1;
   int profiler = 0;
   int sensor = 0;
   int pause_update = 1;
