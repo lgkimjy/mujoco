@@ -2107,6 +2107,16 @@ void Simulate::Sync() {
     mjopt_prev_ = scnstate_.model.opt;
     warn_vgeomfull_prev_ = scnstate_.data.warning[mjWARN_VGEOMFULL].number;
   }
+ /////////////////////////////////////////////////////////////////////
+  ////////////////////////////// JY CODE ////////////////////////////// 
+  // mjGEOM_ARROW, mjGEOM_ARROW2
+  visualizeGeom(com, new mjtNum[3]{0.05, 0.05, 0.5}, new float[4]{1.0, 0.0, 0.0, 0.5}, mjGEOM_SPHERE);          // Visual for CoM
+  visualizeGeom(zmp, new mjtNum[3]{0.02, 0.02, 0.1}, new float[4]{1.0, 1.0, 0.0, 1.0}, mjGEOM_CYLINDER);          // Visual for CoM
+
+  visualizeTraj(com_traj, scn, new mjtNum[3]{0.5, 0.05, 0.5}, new float[4]{1.0, 0.0, 1.0, 0.5});      // Visual for CoM Trjaectory
+  visualizeTraj(com_traj_d, scn, new mjtNum[3]{0.5, 0.05, 0.5}, new float[4]{1.0, 1.0, 1.0, 1.0});    // Visual for CoM Desired Trjaectory
+  ////////////////////////////// JY CODE ////////////////////////////// 
+  /////////////////////////////////////////////////////////////////////
 
   // update settings
   UpdateSettings(this, m_);

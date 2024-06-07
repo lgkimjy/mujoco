@@ -319,6 +319,36 @@ class Simulate {
   int texture_upload_ = -1;
   int mesh_upload_ = -1;
   int hfield_upload_ = -1;
+
+  ///////////////////////////////
+  /////////// JY Code ///////////
+  mjtNum des_vel[3];
+  int mode;
+
+  int history = 1000;
+  mjtNum zmp[3];
+  mjtNum com[3];
+  mjtNum com_d[3];
+  std::deque<mjtNum*> com_traj;
+  std::deque<mjtNum*> com_traj_d;
+
+  void visualizeGeom(mjtNum* data, mjtNum size[], float color[], int type)
+  {
+    mjvGeom* geom = scn.geoms + scn.ngeom++;
+    mjv_initGeom(geom, type, size, data, NULL, color);
+  }
+
+  void visualizeTraj(const std::deque<mjtNum*>& traj, mjvScene& scn, mjtNum size[], float color[])
+  {
+    for(int i = 1; i < traj.size(); i++) 
+    {
+        mjvGeom* test_geom = scn.geoms + scn.ngeom++;
+        mjv_initGeom(test_geom, mjGEOM_SPHERE, size, NULL, NULL, color);
+        mjv_connector(test_geom, mjGEOM_LINE, 2, traj[i-1], traj[i]);
+    }
+  }
+  /////////// JY Code ///////////
+  ///////////////////////////////
 };
 }  // namespace mujoco
 
