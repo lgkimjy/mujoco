@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <deque>
 
 #include <mujoco/mjui.h>
 #include <mujoco/mujoco.h>
