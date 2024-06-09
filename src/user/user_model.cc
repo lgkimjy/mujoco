@@ -28,6 +28,7 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mjmacro.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjspec.h>
 #include <mujoco/mjtnum.h>
 #include <mujoco/mjplugin.h>
 #include <mujoco/mjvisualize.h>
@@ -132,6 +133,7 @@ mjCModel::mjCModel() {
 
 
 mjCModel::mjCModel(const mjCModel& other) {
+  CreateObjectLists();
   *this = other;
 }
 
@@ -206,8 +208,19 @@ static void resetlist(std::vector<T*>& list) {
 
 mjCModel& mjCModel::operator+=(const mjCModel& other) {
   // create global lists
-  MakeLists(bodies_[0]);
-  CreateObjectLists();
+  mjCBody *world = bodies_[0];
+  if (compiled) {
+    resetlist(bodies_);
+    resetlist(joints_);
+    resetlist(geoms_);
+    resetlist(sites_);
+    resetlist(cameras_);
+    resetlist(lights_);
+    resetlist(frames_);
+    world->id = 0;
+    bodies_.push_back(world);
+  }
+  MakeLists(world);
   ProcessLists(/*checkrepeat=*/false);
 
   // copy all elements not in the tree
@@ -264,9 +277,8 @@ mjCModel& mjCModel::operator+=(const mjCModel& other) {
     lights_[i]->def= defaults_[def_map[other.lights_[i]->def]];
   }
 
-  // restore to the same state as other
+  // restore to the original state
   if (!compiled) {
-    mjCBody *world = bodies_[0];
     resetlist(bodies_);
     resetlist(joints_);
     resetlist(geoms_);
@@ -317,16 +329,30 @@ void mjCModel::RemoveFromList(std::vector<T*>& list, const mjCModel& other) {
 
 mjCModel& mjCModel::operator-=(const mjCBody& subtree) {
   mjCModel oldmodel(*this);
-  oldmodel.MakeLists(oldmodel.bodies_[0]);
-  oldmodel.CreateObjectLists();
-  oldmodel.ProcessLists(/*checkrepeat=*/false);
+
+  // create global lists in the old model if not compiled
+  if (!oldmodel.IsCompiled()) {
+    oldmodel.MakeLists(oldmodel.bodies_[0]);
+    oldmodel.ProcessLists(/*checkrepeat=*/false);
+  }
 
   // remove body from tree
-  *bodies_[0] -= subtree;
+  mjCBody* world = bodies_[0];
+  *world -= subtree;
 
   // create global lists
-  MakeLists(bodies_[0]);
-  CreateObjectLists();
+  if (compiled) {
+    resetlist(bodies_);
+    resetlist(joints_);
+    resetlist(geoms_);
+    resetlist(sites_);
+    resetlist(cameras_);
+    resetlist(lights_);
+    resetlist(frames_);
+    world->id = 0;
+    bodies_.push_back(world);
+  }
+  MakeLists(world);
   ProcessLists(/*checkrepeat=*/false);
 
   // check if we have to remove anything else
@@ -337,9 +363,8 @@ mjCModel& mjCModel::operator-=(const mjCBody& subtree) {
   RemoveFromList(actuators_, oldmodel);
   RemoveFromList(sensors_, oldmodel);
 
-  // restore to the same state as before call
+  // restore to the original state
   if (!compiled) {
-    mjCBody* world = bodies_[0];
     resetlist(bodies_);
     resetlist(joints_);
     resetlist(geoms_);
@@ -392,12 +417,12 @@ void mjCModel::CreateObjectLists() {
 
 
 void mjCModel::PointToLocal() {
-  spec.element = static_cast<mjElement*>(this);
-  spec.comment = (mjString)&spec_comment_;
-  spec.modelfiledir = (mjString)&spec_modelfiledir_;
-  spec.modelname = (mjString)&spec_modelname_;
-  spec.meshdir = (mjString)&spec_meshdir_;
-  spec.texturedir = (mjString)&spec_texturedir_;
+  spec.element = static_cast<mjsElement*>(this);
+  spec.comment = &spec_comment_;
+  spec.modelfiledir = &spec_modelfiledir_;
+  spec.modelname = &spec_modelname_;
+  spec.meshdir = &spec_meshdir_;
+  spec.texturedir = &spec_texturedir_;
 }
 
 
@@ -409,11 +434,11 @@ void mjCModel::CopyFromSpec() {
   modelname_ = spec_modelname_;
   meshdir_ = spec_meshdir_;
   texturedir_ = spec_texturedir_;
-  comment = (mjString)&comment_;
-  modelfiledir = (mjString)&modelfiledir_;
-  modelname = (mjString)&modelname_;
-  meshdir = (mjString)&meshdir_;
-  texturedir = (mjString)&texturedir_;
+  comment = &comment_;
+  modelfiledir = &modelfiledir_;
+  modelname = &modelname_;
+  meshdir = &meshdir_;
+  texturedir = &texturedir_;
 }
 
 
@@ -527,6 +552,7 @@ void mjCModel::Clear() {
   sites_.clear();
   cameras_.clear();
   lights_.clear();
+  frames_.clear();
 
   // internal variables
   hasImplicitPluginElem = false;
@@ -1818,6 +1844,8 @@ void mjCModel::CopyTree(mjModel* m) {
       int jid = pj->id;
 
       // set joint fields
+      pj->qposadr_ = qposadr;
+      pj->dofadr_ = dofadr;
       m->jnt_type[jid] = pj->type;
       m->jnt_group[jid] = pj->group;
       m->jnt_limited[jid] = (mjtByte)pj->is_limited();
@@ -2559,6 +2587,8 @@ void mjCModel::CopyObjects(mjModel* m) {
     m->actuator_trnid[2*i+1] = pac->trnid[1];
     m->actuator_actnum[i] = pac->actdim + pac->plugin_actdim;
     m->actuator_actadr[i] = m->actuator_actnum[i] ? adr : -1;
+    pac->actadr_ = m->actuator_actadr[i];
+    pac->actnum_ = m->actuator_actnum[i];
     adr += m->actuator_actnum[i];
     m->actuator_group[i] = pac->group;
     m->actuator_ctrllimited[i] = (mjtByte)pac->is_ctrllimited();
@@ -2687,6 +2717,75 @@ void mjCModel::CopyObjects(mjModel* m) {
   // save qpos0 in user model (to recognize changed key_qpos in write)
   qpos0.resize(nq);
   mju_copy(qpos0.data(), m->qpos0, nq);
+}
+
+
+
+// save the current state
+void mjCModel::SaveState(const mjData* d) {
+  for (auto joint : joints_) {
+    switch (joint->type) {
+      case mjJNT_FREE:
+        mju_copy(joint->qpos, d->qpos + joint->qposadr_, 7);
+        mju_copy(joint->qvel, d->qvel + joint->dofadr_, 6);
+        break;
+      case mjJNT_BALL:
+        mju_copy(joint->qpos, d->qpos + joint->qposadr_, 4);
+        mju_copy(joint->qvel, d->qvel + joint->dofadr_, 3);
+        break;
+      case mjJNT_HINGE:
+      case mjJNT_SLIDE:
+        mju_copy(joint->qpos, d->qpos + joint->qposadr_, 1);
+        mju_copy(joint->qvel, d->qvel + joint->dofadr_, 1);
+        break;
+    }
+  }
+
+  for (auto actuator : actuators_) {
+    if (actuator->actadr_ != -1) {
+      actuator->act.assign(actuator->actnum_, 0);
+      mju_copy(actuator->act.data(), d->act + actuator->actadr_, actuator->actnum_);
+    }
+  }
+}
+
+
+
+// restore the previous state
+void mjCModel::RestoreState(const mjModel* m, mjData** dest) {
+  mj_makeRawData(dest, m);
+  mjData* d = *dest;
+  if (d) {
+    mj_initPlugin(m, d);
+    mj_resetData(m, d);
+  }
+
+  for (auto joint : joints_) {
+    if (!mjuu_defined(joint->qpos[0]) || !mjuu_defined(joint->qvel[0])) {
+      continue;
+    }
+    switch (joint->type) {
+      case mjJNT_FREE:
+        mju_copy(d->qpos + joint->qposadr_, joint->qpos, 7);
+        mju_copy(d->qvel + joint->dofadr_, joint->qvel, 6);
+        break;
+      case mjJNT_BALL:
+        mju_copy(d->qpos + joint->qposadr_, joint->qpos, 4);
+        mju_copy(d->qvel + joint->dofadr_, joint->qvel, 3);
+        break;
+      case mjJNT_HINGE:
+      case mjJNT_SLIDE:
+        mju_copy(d->qpos + joint->qposadr_, joint->qpos, 1);
+        mju_copy(d->qvel + joint->dofadr_, joint->qvel, 1);
+        break;
+    }
+  }
+
+  for (auto actuator : actuators_) {
+    if (mjuu_defined(actuator->act[0])) {
+      mju_copy(d->act + actuator->actadr_, actuator->act.data(), actuator->actnum_);
+    }
+  }
 }
 
 
@@ -3050,7 +3149,7 @@ static void warninghandler(const char* msg) {
 
 
 // compiler
-mjModel* mjCModel::Compile(const mjVFS* vfs) {
+mjModel* mjCModel::Compile(const mjVFS* vfs, mjModel** m) {
   if (compiled) {
     // clear kinematic tree
     for (int i=0; i<bodies_.size(); i++) {
@@ -3071,7 +3170,7 @@ mjModel* mjCModel::Compile(const mjVFS* vfs) {
   // setjmp returns, and therefore to pass nullptr directly to the
   // mj_deleteModel and mj_deleteData calls in the subsequent catch block,
   // without ever reading the actual pointer values.
-  mjModel* volatile m = nullptr;
+  mjModel* volatile model = (m && *m) ? *m : nullptr;
   mjData* volatile data = nullptr;
 
   // save error and warning handlers
@@ -3093,10 +3192,10 @@ mjModel* mjCModel::Compile(const mjVFS* vfs) {
       // TryCompile resulted in an mju_error which was converted to a longjmp.
       throw mjCError(0, "engine error: %s", errortext);
     }
-    TryCompile(*const_cast<mjModel**>(&m), *const_cast<mjData**>(&data), vfs);
+    TryCompile(*const_cast<mjModel**>(&model), *const_cast<mjData**>(&data), vfs);
   } catch (mjCError err) {
     // deallocate everything allocated in Compile
-    mj_deleteModel(m);
+    mj_deleteModel(model);
     mj_deleteData(data);
     mjCBody* world = bodies_[0];
     Clear();
@@ -3115,7 +3214,7 @@ mjModel* mjCModel::Compile(const mjVFS* vfs) {
   _mjPRIVATE__set_tls_error_fn(save_error);
   _mjPRIVATE__set_tls_warning_fn(save_warning);
   compiled = true;
-  return m;
+  return model;
 }
 
 
@@ -3278,16 +3377,17 @@ void mjCModel::TryCompile(mjModel*& m, mjData*& d, const mjVFS* vfs) {
   }
 
   // create low-level model
-  m = mj_makeModel(nq, nv, nu, na, nbody, nbvh, nbvhstatic, nbvhdynamic, njnt, ngeom, nsite,
-                   ncam, nlight, nflex, nflexvert, nflexedge, nflexelem,
-                   nflexelemdata, nflexshelldata, nflexevpair, nflextexcoord,
-                   nmesh, nmeshvert, nmeshnormal, nmeshtexcoord, nmeshface, nmeshgraph,
-                   nskin, nskinvert, nskintexvert, nskinface, nskinbone, nskinbonevert,
-                   nhfield, nhfielddata, ntex, ntexdata, nmat, npair, nexclude,
-                   neq, ntendon, nwrap, nsensor, nnumeric, nnumericdata, ntext, ntextdata,
-                   ntuple, ntupledata, nkey, nmocap, nplugin, npluginattr,
-                   nuser_body, nuser_jnt, nuser_geom, nuser_site, nuser_cam,
-                   nuser_tendon, nuser_actuator, nuser_sensor, nnames, npaths);
+  mj_makeModel(&m,
+               nq, nv, nu, na, nbody, nbvh, nbvhstatic, nbvhdynamic, njnt, ngeom, nsite,
+               ncam, nlight, nflex, nflexvert, nflexedge, nflexelem,
+               nflexelemdata, nflexshelldata, nflexevpair, nflextexcoord,
+               nmesh, nmeshvert, nmeshnormal, nmeshtexcoord, nmeshface, nmeshgraph,
+               nskin, nskinvert, nskintexvert, nskinface, nskinbone, nskinbonevert,
+               nhfield, nhfielddata, ntex, ntexdata, nmat, npair, nexclude,
+               neq, ntendon, nwrap, nsensor, nnumeric, nnumericdata, ntext, ntextdata,
+               ntuple, ntupledata, nkey, nmocap, nplugin, npluginattr,
+               nuser_body, nuser_jnt, nuser_geom, nuser_site, nuser_cam,
+               nuser_tendon, nuser_actuator, nuser_sensor, nnames, npaths);
   if (!m) {
     throw mjCError(0, "could not create mjModel");
   }
@@ -3439,7 +3539,7 @@ void mjCModel::TryCompile(mjModel*& m, mjData*& d, const mjVFS* vfs) {
   // create data
   int disableflags = m->opt.disableflags;
   m->opt.disableflags |= mjDSBL_CONTACT;
-  d = mj_makeRawData(m);
+  mj_makeRawData(&d, m);
   if (!d) {
     mj_deleteModel(m);
     throw mjCError(0, "could not create mjData");

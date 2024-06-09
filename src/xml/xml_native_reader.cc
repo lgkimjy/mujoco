@@ -36,7 +36,7 @@
 #include "engine/engine_plugin.h"
 #include "engine/engine_util_errmem.h"
 #include "engine/engine_util_misc.h"
-#include "user/user_api.h"
+#include <mujoco/mjspec.h>
 #include "user/user_composite.h"
 #include "user/user_flexcomp.h"
 #include "user/user_util.h"
@@ -145,7 +145,7 @@ const char* MJCF[nMJCF][mjXATTRNUM] = {
 
     {"default", "R", "1", "class"},
     {"<"},
-        {"mesh", "?", "1", "scale"},
+        {"mesh", "?", "2", "scale", "maxhullvert"},
         {"material", "?", "10", "texture", "emission", "specular", "shininess",
             "reflectance", "metallic", "roughness", "rgba", "texrepeat", "texuniform"},
         {"joint", "?", "22", "type", "group", "pos", "axis", "springdamper",
@@ -177,18 +177,16 @@ const char* MJCF[nMJCF][mjXATTRNUM] = {
             "dyntype", "gaintype", "biastype", "dynprm", "gainprm", "biasprm", "actearly"},
         {"motor", "?", "8", "ctrllimited", "forcelimited", "ctrlrange", "forcerange",
             "gear", "cranklength", "user", "group"},
-        {"position", "?", "12", "ctrllimited", "forcelimited", "ctrlrange", "inheritrange",
-            "forcerange", "gear", "cranklength", "user", "group", "kp", "kv", "timeconst"},
+        {"position", "?", "13", "ctrllimited", "forcelimited", "ctrlrange", "inheritrange",
+            "forcerange", "gear", "cranklength", "user", "group", "kp", "kv", "dampratio", "timeconst"},
         {"velocity", "?", "9", "ctrllimited", "forcelimited", "ctrlrange", "forcerange",
-            "gear", "cranklength", "user", "group",
-            "kv"},
-        {"intvelocity", "?", "12", "ctrllimited", "forcelimited",
+            "gear", "cranklength", "user", "group", "kv"},
+        {"intvelocity", "?", "13", "ctrllimited", "forcelimited",
             "ctrlrange", "forcerange", "actrange", "inheritrange",
             "gear", "cranklength", "user", "group",
-            "kp", "kv"},
+            "kp", "kv", "dampratio"},
         {"damper", "?", "8", "forcelimited", "ctrlrange", "forcerange",
-            "gear", "cranklength", "user", "group",
-            "kv"},
+            "gear", "cranklength", "user", "group", "kv"},
         {"cylinder", "?", "12", "ctrllimited", "forcelimited", "ctrlrange", "forcerange",
             "gear", "cranklength", "user", "group",
             "timeconst", "area", "diameter", "bias"},
@@ -223,8 +221,9 @@ const char* MJCF[nMJCF][mjXATTRNUM] = {
 
     {"asset", "*", "0"},
     {"<"},
-        {"mesh", "*", "12", "name", "class", "content_type", "file", "vertex", "normal",
-            "texcoord", "face", "refpos", "refquat", "scale", "smoothnormal"},
+        {"mesh", "*", "13", "name", "class", "content_type", "file", "vertex", "normal",
+            "texcoord", "face", "refpos", "refquat", "scale", "smoothnormal",
+            "maxhullvert"},
         {"<"},
           {"plugin", "*", "2", "plugin", "instance"},
           {"<"},
@@ -389,22 +388,22 @@ const char* MJCF[nMJCF][mjXATTRNUM] = {
             "ctrllimited", "forcelimited", "ctrlrange", "forcerange",
             "lengthrange", "gear", "cranklength", "user",
             "joint", "jointinparent", "tendon", "slidersite", "cranksite", "site", "refsite"},
-        {"position", "*", "22", "name", "class", "group",
+        {"position", "*", "23", "name", "class", "group",
             "ctrllimited", "forcelimited", "ctrlrange", "inheritrange", "forcerange",
             "lengthrange", "gear", "cranklength", "user",
             "joint", "jointinparent", "tendon", "slidersite", "cranksite", "site", "refsite",
-            "kp", "kv", "timeconst"},
+            "kp", "kv", "dampratio", "timeconst"},
         {"velocity", "*", "19", "name", "class", "group",
             "ctrllimited", "forcelimited", "ctrlrange", "forcerange",
             "lengthrange", "gear", "cranklength", "user",
             "joint", "jointinparent", "tendon", "slidersite", "cranksite", "site", "refsite",
             "kv"},
-        {"intvelocity", "*", "22", "name", "class", "group",
+        {"intvelocity", "*", "23", "name", "class", "group",
             "ctrllimited", "forcelimited",
             "ctrlrange", "forcerange", "actrange", "inheritrange", "lengthrange",
             "gear", "cranklength", "user",
             "joint", "jointinparent", "tendon", "slidersite", "cranksite", "site", "refsite",
-            "kp", "kv"},
+            "kp", "kv", "dampratio"},
         {"damper", "*", "18", "name", "class", "group",
             "forcelimited", "ctrlrange", "forcerange",
             "lengthrange", "gear", "cranklength", "user",
@@ -1393,6 +1392,11 @@ void mjXReader::OneMesh(XMLElement* elem, mjsMesh* pmesh) {
     pmesh->smoothnormal = (n==1);
   }
 
+  if (ReadAttrInt(elem, "maxhullvert", &n)) {
+    if (n != 0 && n < 4) throw mjXError(elem, "maxhullvert must be larger than 3");
+    pmesh->maxhullvert = n;
+  }
+
   // read user vertex data
   if (ReadAttrTxt(elem, "vertex", text)) {
     auto uservert = ReadAttrVec<float>(elem, "vertex");
@@ -1884,13 +1888,13 @@ void mjXReader::OneEquality(XMLElement* elem, mjsEquality* pequality) {
     case mjEQ_JOINT:
       ReadAttrTxt(elem, "joint1", name1, true);
       ReadAttrTxt(elem, "joint2", name2);
-      ReadAttr(elem, "polycoef", 5, pequality->data, text);
+      ReadAttr(elem, "polycoef", 5, pequality->data, text, false, false);
       break;
 
     case mjEQ_TENDON:
       ReadAttrTxt(elem, "tendon1", name1, true);
       ReadAttrTxt(elem, "tendon2", name2);
-      ReadAttr(elem, "polycoef", 5, pequality->data, text);
+      ReadAttr(elem, "polycoef", 5, pequality->data, text, false, false);
       break;
 
     case mjEQ_FLEX:
@@ -2087,18 +2091,33 @@ void mjXReader::OneActuator(XMLElement* elem, mjsActuator* pact) {
     ReadAttr(elem, "kp", 1, pact->gainprm, text);
     pact->biasprm[1] = -pact->gainprm[0];
 
-    if (ReadAttr(elem, "kv", 1, pact->biasprm + 2, text)) {
-      if (pact->biasprm[2] < 0)
-        throw mjXError(elem, "kv cannot be negative");
-      pact->biasprm[2] *= -1;
+    // read kv
+    double kv = -1;  // -1: undefined
+    if (ReadAttr(elem, "kv", 1, &kv, text)) {
+      if (kv < 0) throw mjXError(elem, "kv cannot be negative");
     }
 
+    // read dampratio
+    double dampratio = -1;  // -1: undefined
+    if (ReadAttr(elem, "dampratio", 1, &dampratio, text)) {
+      if (dampratio < 0) throw mjXError(elem, "dampratio cannot be negative");
+    }
+
+    // set biasprm[2]; negative: regular damping, positive: dampratio
+    if (dampratio > 0 && kv > 0) {
+      throw mjXError(elem, "kv and dampratio cannot both be defined");
+    }
+    if (kv > 0) pact->biasprm[2] = -kv;
+    if (dampratio > 0) pact->biasprm[2] = dampratio;
+
+    // read timeconst, set dyntype
     if (ReadAttr(elem, "timeconst", 1, pact->dynprm, text)) {
       if (pact->dynprm[0] < 0)
         throw mjXError(elem, "timeconst cannot be negative");
       pact->dyntype = pact->dynprm[0] ? mjDYN_FILTEREXACT : mjDYN_NONE;
     }
 
+    // handle inheritrange
     ReadAttr(elem, "inheritrange", 1, &pact->inheritrange, text);
     if (pact->inheritrange > 0) {
       if (type == "position") {

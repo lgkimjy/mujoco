@@ -100,7 +100,7 @@ Neither ``mjx.Model`` nor ``mjx.Data`` are meant to be constructed manually.  An
 .. code-block:: python
 
    model = mujoco.MjModel.from_xml_string("...")
-   mjx_model = mjx.device_put(model)
+   mjx_model = mjx.put_model(model)
    mjx_data = mjx.make_data(model)
 
 Using ``mjx.make_data`` may be preferable when constructing batched ``mjx.Data`` structures inside of a ``vmap``.
@@ -151,7 +151,7 @@ Minimal example
    """
 
    model = mujoco.MjModel.from_xml_string(XML)
-   mjx_model = mjx.device_put(model)
+   mjx_model = mjx.put_model(model)
 
    @jax.vmap
    def batched_step(vel):
@@ -196,15 +196,15 @@ The following features are **fully supported** in MJX:
    * - :ref:`Actuator Bias <mjtBias>`
      - ``NONE``, ``AFFINE``
    * - :ref:`Geom <mjtGeom>`
-     - ``PLANE``, ``SPHERE``, ``CAPSULE``, ``BOX``, ``MESH``
+     - ``PLANE``, ``HFIELD``, ``SPHERE``, ``CAPSULE``, ``BOX``, ``MESH`` are fully implemented. ``ELLIPSOID`` and ``CYLINDER`` are implemented but only collide with other primitives.
    * - :ref:`Constraint <mjtConstraint>`
-     - ``EQUALITY``, ``LIMIT_JOINT``, ``CONTACT_FRICTIONLESS``, ``CONTACT_PYRAMIDAL``
+     - ``EQUALITY``, ``LIMIT_JOINT``, ``CONTACT_FRICTIONLESS``, ``CONTACT_PYRAMIDAL``, ``CONTACT_ELLIPTIC``
    * - :ref:`Equality <mjtEq>`
      - ``CONNECT``, ``WELD``, ``JOINT``
    * - :ref:`Integrator <mjtIntegrator>`
      - ``EULER``, ``RK4``
    * - :ref:`Cone <mjtCone>`
-     - ``PYRAMIDAL``
+     - ``PYRAMIDAL``, ``ELLIPTIC``
    * - :ref:`Condim <coContact>`
      - 1, 3, 4, 6
    * - :ref:`Solver <mjtSolver>`
@@ -223,9 +223,9 @@ The following features are **in development** and coming soon:
    * - Category
      - Feature
    * - :ref:`Geom <mjtGeom>`
-     - ``SDF``, ``HFIELD``, ``ELLIPSOID``, ``CYLINDER``
+     - ``SDF``. Collisions between (``SPHERE``, ``BOX``, ``MESH``, ``HFIELD``) and ``CYLINDER``. Collisions between (``BOX``, ``MESH``, ``HFIELD``) and ``ELLIPSOID``.
    * - :ref:`Constraint <mjtConstraint>`
-     - :ref:`Frictionloss <coFriction>`, ``CONTACT_ELLIPTIC``, ``FRICTION_DOF``
+     - :ref:`Frictionloss <coFriction>`, ``FRICTION_DOF``
    * - :ref:`Integrator <mjtIntegrator>`
      - ``IMPLICIT``, ``IMPLICITFAST``
    * - Dynamics
@@ -240,8 +240,6 @@ The following features are **in development** and coming soon:
      - ``MUSCLE``
    * - :ref:`Tendon Wrapping <mjtWrap>`
      - ``NONE``, ``JOINT``, ``PULLEY``, ``SITE``, ``SPHERE``, ``CYLINDER``
-   * - :ref:`Cone <mjtCone>`
-     - ``ELLIPTIC``
    * - Fluid Model
      - :ref:`flEllipsoid`
    * - :ref:`Tendons <tendon>`

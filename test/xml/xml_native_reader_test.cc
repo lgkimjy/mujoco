@@ -24,18 +24,23 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjspec.h>
 #include <mujoco/mujoco.h>
 #include "src/cc/array_safety.h"
 #include "src/engine/engine_util_errmem.h"
-#include "src/user/user_api.h"
-#include "src/xml/xml.h"
+#include "src/xml/xml_api.h"
 #include "test/fixture.h"
 
 namespace mujoco {
 namespace {
 
+std::vector<mjtNum> AsVector(const mjtNum* array, int n) {
+  return std::vector<mjtNum>(array, array + n);
+}
+
 using ::std::string;
 using ::testing::AllOf;
+using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::FloatEq;
 using ::testing::HasSubstr;
@@ -549,14 +554,9 @@ TEST_F(XMLReaderTest, IncludeTest) {
   auto vfs = std::make_unique<mjVFS>();
   mj_defaultVFS(vfs.get());
 
-  mj_makeEmptyFileVFS(vfs.get(), "model1.xml", sizeof(xml1));
-  std::memcpy(vfs->filedata[vfs->nfile - 1], xml1, sizeof(xml1));
-
-  mj_makeEmptyFileVFS(vfs.get(), "model2.xml", sizeof(xml2));
-  std::memcpy(vfs->filedata[vfs->nfile - 1], xml2, sizeof(xml2));
-
-  mj_makeEmptyFileVFS(vfs.get(), "model3.xml", sizeof(xml3));
-  std::memcpy(vfs->filedata[vfs->nfile - 1], xml3, sizeof(xml3));
+  mj_addBufferVFS(vfs.get(), "model1.xml", xml1, sizeof(xml1));
+  mj_addBufferVFS(vfs.get(), "model2.xml", xml2, sizeof(xml2));
+  mj_addBufferVFS(vfs.get(), "model3.xml", xml3, sizeof(xml3));
 
   std::array<char, 1024> error;
   mjModel* model = LoadModelFromString(xml, error.data(),
@@ -601,8 +601,7 @@ TEST_F(XMLReaderTest, IncludeSameFileTest) {
   auto vfs = std::make_unique<mjVFS>();
   mj_defaultVFS(vfs.get());
 
-  mj_makeEmptyFileVFS(vfs.get(), "model1.xml", sizeof(xml1));
-  std::memcpy(vfs->filedata[vfs->nfile - 1], xml1, sizeof(xml1));
+  mj_addBufferVFS(vfs.get(), "model1.xml", xml1, sizeof(xml1));
 
   std::array<char, 1024> error;
   mjModel* model = LoadModelFromString(xml, error.data(), error.size(),
@@ -834,8 +833,43 @@ TEST_F(XMLReaderTest, IncludeAbsoluteTest) {
 
   mj_deleteModel(model);
 }
-// ------------------------ test frame parsing ---------------------------------
 
+TEST_F(XMLReaderTest, ParsePolycoef) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint name="0"/>
+        <geom size="1"/>
+      </body>
+      <body>
+        <joint name="1"/>
+        <geom size="1"/>
+      </body>
+    </worldbody>
+    <equality>
+      <joint joint1="0" joint2="1"/>
+      <joint joint1="0" joint2="1" polycoef="2"/>
+      <joint joint1="0" joint2="1" polycoef="3 4"/>
+      <joint joint1="0" joint2="1" polycoef="5 6 7 8 9"/>
+    </equality>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  mjModel* m = LoadModelFromString(xml, error.data(), error.size());
+  EXPECT_THAT(m, NotNull()) << error.data();
+  EXPECT_THAT(AsVector(m->eq_data + 0*mjNEQDATA, 5),
+              ElementsAre(0, 1, 0, 0, 0));
+  EXPECT_THAT(AsVector(m->eq_data + 1*mjNEQDATA, 5),
+              ElementsAre(2, 1, 0, 0, 0));
+  EXPECT_THAT(AsVector(m->eq_data + 2*mjNEQDATA, 5),
+              ElementsAre(3, 4, 0, 0, 0));
+  EXPECT_THAT(AsVector(m->eq_data + 3*mjNEQDATA, 5),
+              ElementsAre(5, 6, 7, 8, 9));
+  mj_deleteModel(m);
+}
+
+// ------------------------ test frame parsing ---------------------------------
 TEST_F(XMLReaderTest, ParseFrame) {
   static constexpr char xml[] = R"(
   <mujoco>
@@ -1050,7 +1084,7 @@ TEST_F(XMLReaderTest, ParseReplicateDefaultPropagate) {
   </mujoco>
   )";
   std::array<char, 1024> error;
-  mjSpec* spec = ParseSpecFromString(xml, error.data(), error.size());
+  mjSpec* spec = mj_parseXMLString(xml, 0, error.data(), error.size());
   EXPECT_THAT(spec, NotNull()) << error.data();
 
   mjsBody* torso = mjs_findBody(spec, "torso-0");
@@ -1067,7 +1101,7 @@ TEST_F(XMLReaderTest, ParseReplicateDefaultPropagate) {
   EXPECT_THAT(def, NotNull());
   EXPECT_THAT(def->geom->type, mjGEOM_CAPSULE);
 
-  mjs_deleteSpec(spec);
+  mj_deleteSpec(spec);
 }
 
 // ----------------------- test camera parsing ---------------------------------

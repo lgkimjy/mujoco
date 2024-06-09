@@ -7,19 +7,54 @@ Upcoming version (not yet released)
 
 General
 ^^^^^^^
+1. Added a new API for :doc:`procedural model manipulation<programming/modeledit>`. Fixes :github:issue:`364`.
+   Still missing:
+
+   - Detailed documentation.
+   - Python bindings.
+
+2. Added :ref:`maxhullvert<asset-mesh-maxhullvert>`, the maximum number of vertices in a mesh's convex hull.
+
+
+MJX
+~~~
+
+3. Added support for :ref:`elliptic friction cones<option-cone>`.
+4. Fixed a bug that resulted in less-optimal linesearch solutions for some difficult constraint settings.
+5. Fixed a bug in the Newton solver that sometimes resulted in less-optimal gradients.
+
+Version 3.1.6 (Jun 3, 2024)
+---------------------------
+
+General
+^^^^^^^
 
 1. Added :ref:`mj_geomDistance` for computing the shortest signed distance between two geoms and optionally a segment
    connecting them. Relatedly, added the 3 sensors: :ref:`distance<sensor-distance>`, :ref:`normal<sensor-normal>`,
    :ref:`fromto<sensor-fromto>`. See the function and sensor documentation for details. Fixes :github:issue:`51`.
-2. Added :ref:`timeconst<actuator-position-timeconst>` attribute to the :ref:`position actuator<actuator-position>`.
-   When set to a positive value, the actuator is made stateful with :at:`filterexact` dynamics.
+2. Improvements to position actuators:
+
+   - Added :ref:`timeconst<actuator-position-timeconst>` attribute to the :ref:`position actuator<actuator-position>`.
+     When set to a positive value, the actuator is made stateful with :at:`filterexact` dynamics.
+   - Added :ref:`dampratio<actuator-position-dampratio>` to both :el:`position` and :el:`intvelocity` actuators. An
+     alternative to the :at:`kv` attribute, it provides a convenient way to set actuator damping using natural units.
+     See attribute documentation for details.
+
+MJX
+^^^
+
+3. Add height-field collision support. Fixes :github:issue:`1491`.
+4. Add a pre-compiled field ``mesh_convex`` to ``mjx.Model`` so that mesh properties can be vmapped over.
+   Fixes :github:issue:`1655`.
+5. Fix a bug in convex mesh collisions, where erroneous edge contacts were being created even though face
+   separating axes were found. Fixes :github:issue:`1695`.
 
 Bug fixes
 ^^^^^^^^^
 
-3. Fixed a bug the could cause collisions to be missed when :ref:`fusestatic<compiler-fusestatic>` is enabled, as is
+6. Fixed a bug the could cause collisions to be missed when :ref:`fusestatic<compiler-fusestatic>` is enabled, as is
    often the case for URDF imports. Fixes :github:issue:`1069`, :github:issue:`1577`.
-4. Fixed a bug that was causing the visualization of SDF iterations to write outside the size of the vector storing
+7. Fixed a bug that was causing the visualization of SDF iterations to write outside the size of the vector storing
    them. Fixes :github:issue:`1539`.
 
 Version 3.1.5 (May 7, 2024)
@@ -701,13 +736,13 @@ General
    Previously, the smooth part consisted of two stitched quadratics, once continuously differentiable.
    It is now a single quintic, twice continuously differentiable:
 
-  .. math::
-     s(x) =
-     \begin{cases}
-        0,                    &       & x \le 0  \\
-        6x^5 - 15x^4 + 10x^3, & 0 \lt & x \lt 1  \\
-        1,                    & 1 \le & x \qquad
-     \end{cases}
+   .. math::
+      s(x) =
+      \begin{cases}
+         0,                    &       & x \le 0  \\
+         6x^5 - 15x^4 + 10x^3, & 0 \lt & x \lt 1  \\
+         1,                    & 1 \le & x \qquad
+      \end{cases}
 
 17. Added optional :ref:`tausmooth<actuator-muscle-tausmooth>` attribute to muscle actuators. When positive, the
     time-constant :math:`\tau` of muscle activation/deactivation uses :ref:`mju_sigmoid` to transition smoothly
