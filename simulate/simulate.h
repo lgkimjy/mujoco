@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 #include <deque>
+#include <iostream>
 
 #include <mujoco/mjui.h>
 #include <mujoco/mujoco.h>
@@ -323,14 +324,23 @@ class Simulate {
 
   ///////////////////////////////
   /////////// JY Code ///////////
+  // command render options
   mjtNum des_vel[3];
   int mode;
 
+  // custom render options
+  int optRender_ref_zmp = 1;
+  int optRender_zmp = 1;
+  int optRender_CoM_d = 1;
+  int optRender_CoM_traj = 1;
+  int optRender_CoM = 1;
+
   int history = 1000;
   mjtNum zmp[3];
+  std::vector<mjtNum*> ref_zmp;
   mjtNum com[3];
-  mjtNum com_d[3];
   std::deque<mjtNum*> com_traj;
+  mjtNum com_d[3];
   std::deque<mjtNum*> com_traj_d;
 
   void visualizeGeom(mjtNum* data, mjtNum size[], float color[], int type)
@@ -347,7 +357,17 @@ class Simulate {
         mjv_initGeom(test_geom, mjGEOM_SPHERE, size, NULL, NULL, color);
         mjv_connector(test_geom, mjGEOM_LINE, 2, traj[i-1], traj[i]);
     }
-  }
+  }// uses for draw history Trajectory
+
+  void visualizeTraj2(const std::vector<mjtNum*>& traj, mjvScene& scn, mjtNum size[], float color[])
+  {
+    for(int i = 1; i < traj.size(); i++) 
+    {
+        mjvGeom* test_geom = scn.geoms + scn.ngeom++;
+        mjv_initGeom(test_geom, mjGEOM_SPHERE, size, NULL, NULL, color);
+        mjv_connector(test_geom, mjGEOM_LINE, 5, traj[i-1], traj[i]);
+    }
+  }// uses for draw desired and Reference Trajectory
   /////////// JY Code ///////////
   ///////////////////////////////
 };

@@ -112,6 +112,8 @@ enum {
   // right ui
   SECT_JOINT = 0,
   SECT_CONTROL,
+  SECT_CUSTOM_RENDERING,
+  SECT_CMD,
   NSECT1
 };
 
@@ -1104,6 +1106,52 @@ void MakeControlSection(mj::Simulate* sim, int oldstate) {
   }
 }
 
+/////////////////////////////////////////////////////////////////////
+////////////////////////////// JY CODE //////////////////////////////
+void MakeCustomRenderSection(mj::Simulate* sim, int oldstate) {
+  mjuiDef defCustomRendering[] = {
+    {mjITEM_SECTION, "Custom Rendering", oldstate, nullptr, "AC"},
+    {mjITEM_END}
+  };
+
+  // add section
+  mjui_add(&sim->ui1, defCustomRendering);
+
+  // create tree slider
+  mjuiDef defTree[] = {
+      {mjITEM_SEPARATOR, "Trajectory", 1},
+      {mjITEM_CHECKINT,  "Ref_ZMP", 1, &sim->optRender_ref_zmp, ""},
+      {mjITEM_CHECKINT,  "Desired_CoM", 1, &sim->optRender_CoM_d, ""},
+      {mjITEM_CHECKINT,  "CoM", 2, &sim->optRender_CoM_traj, ""},
+      {mjITEM_SEPARATOR, "Position", 1},
+      {mjITEM_CHECKINT,  "CoM", 1, &sim->optRender_CoM, ""},
+      {mjITEM_CHECKINT,  "ZMP", 1, &sim->optRender_zmp, ""}, 
+      {mjITEM_END}
+  };
+  mjui_add(&sim->ui1, defTree);
+}
+
+void MakeCommandSection(mj::Simulate* sim, int oldstate) {
+  mjuiDef defCommand[] = {
+    {mjITEM_SECTION, "Commands", oldstate, nullptr, "AC"},
+    {mjITEM_END}
+  };
+
+  // add section
+  mjui_add(&sim->ui1, defCommand);
+
+  // create tree slider
+  mjuiDef defTree[] = {
+      {mjITEM_SEPARATOR, "Mode Selection", 1},
+      {mjITEM_BUTTON,    "Balance", 2, nullptr, ""},
+      {mjITEM_BUTTON,    "Walking", 2, nullptr, ""},
+      {mjITEM_END}
+  };
+  mjui_add(&sim->ui1, defTree);
+}
+////////////////////////////// JY CODE ////////////////////////////// 
+/////////////////////////////////////////////////////////////////////
+
 // make model-dependent UI sections
 void MakeUiSections(mj::Simulate* sim, const mjModel* m, const mjData* d) {
   // get section open-close state, UI 0
@@ -1135,6 +1183,15 @@ void MakeUiSections(mj::Simulate* sim, const mjModel* m, const mjData* d) {
   MakeGroupSection(sim, oldstate0[SECT_GROUP]);
   MakeJointSection(sim, oldstate1[SECT_JOINT]);
   MakeControlSection(sim, oldstate1[SECT_CONTROL]);
+
+  /////////////////////////////////////////////////////////////////////
+  ////////////////////////////// JY CODE //////////////////////////////
+  oldstate1[SECT_CUSTOM_RENDERING] = 1;    // open command section
+  MakeCustomRenderSection(sim, oldstate1[SECT_CUSTOM_RENDERING]);
+  oldstate1[SECT_CMD] = 1;    // open command section
+  MakeCommandSection(sim, oldstate1[SECT_CMD]);
+  ////////////////////////////// JY CODE ////////////////////////////// 
+  /////////////////////////////////////////////////////////////////////
 }
 
 //---------------------------------- utility functions ---------------------------------------------
@@ -1146,7 +1203,7 @@ void AlignAndScaleView(mj::Simulate* sim, const mjModel* m) {
   
   /////////////////////////////////////////////////////////////////////
   ////////////////////////////// JY CODE ////////////////////////////// 
-  sim->cam.distance = 1.3 * m->stat.extent;
+  sim->cam.distance = 1.15 * m->stat.extent;
   sim->cam.type = mjCAMERA_TRACKING;
   sim->cam.trackbodyid = 0;  
   ////////////////////////////// JY CODE ////////////////////////////// 
@@ -1540,6 +1597,19 @@ void UiEvent(mjuiState* state) {
         sim->pending_.zero_ctrl = true;
       }
     }
+
+    /////////////////////////////////////////////////////////////////////
+    ////////////////////////////// JY CODE //////////////////////////////
+    // Command section
+    if (it && it->sectionid==SECT_CMD) {
+      if (it->itemid==1) {
+        sim->mode = 1;
+      } else if (it->itemid==2) {
+        sim->mode = 2;
+      }
+    }
+    ////////////////////////////// JY CODE //////////////////////////////
+    /////////////////////////////////////////////////////////////////////
 
     // stop if UI processed event
     if (it!=nullptr || (state->type==mjEVENT_KEY && state->key==0)) {
@@ -2110,11 +2180,13 @@ void Simulate::Sync() {
  /////////////////////////////////////////////////////////////////////
   ////////////////////////////// JY CODE ////////////////////////////// 
   // mjGEOM_ARROW, mjGEOM_ARROW2
-  visualizeGeom(com, new mjtNum[3]{0.05, 0.05, 0.5}, new float[4]{1.0, 0.0, 0.0, 0.5}, mjGEOM_SPHERE);          // Visual for CoM
-  visualizeGeom(zmp, new mjtNum[3]{0.02, 0.02, 0.1}, new float[4]{1.0, 1.0, 0.0, 1.0}, mjGEOM_CYLINDER);          // Visual for CoM
+  if(optRender_CoM == 1) visualizeGeom(com, new mjtNum[3]{0.03, 0.03, 0.3}, new float[4]{1.0, 0.0, 0.0, 0.3}, mjGEOM_SPHERE);          // Visual for CoM
+  if(optRender_CoM_d == 1) visualizeGeom(com_d, new mjtNum[3]{0.025, 0.025, 0.025}, new float[4]{1.0, 0.0, 0.0, 0.7}, mjGEOM_SPHERE);          // Visual for CoM
+  if(optRender_zmp == 1) visualizeGeom(zmp, new mjtNum[3]{0.02, 0.02, 0.1}, new float[4]{1.0, 1.0, 0.0, 1.0}, mjGEOM_CYLINDER);          // Visual for CoM
 
-  visualizeTraj(com_traj, scn, new mjtNum[3]{0.5, 0.05, 0.5}, new float[4]{1.0, 0.0, 1.0, 0.5});      // Visual for CoM Trjaectory
-  visualizeTraj(com_traj_d, scn, new mjtNum[3]{0.5, 0.05, 0.5}, new float[4]{1.0, 1.0, 1.0, 1.0});    // Visual for CoM Desired Trjaectory
+  if(optRender_CoM_traj == 1) visualizeTraj(com_traj, scn, new mjtNum[3]{0.5, 0.05, 0.5}, new float[4]{1.0, 0.0, 1.0, 0.5});      // Visual for CoM Trjaectory
+  if(optRender_CoM_d == 1) visualizeTraj(com_traj_d, scn, new mjtNum[3]{0.5, 0.05, 0.5}, new float[4]{1.0, 1.0, 1.0, 1.0});    // Visual for CoM Desired Trjaectory
+  if(optRender_ref_zmp == 1) visualizeTraj2(ref_zmp, scn, new mjtNum[3]{0.1, 0.1, 0.1}, new float[4]{0.0, 1.0, 0.0, 1.0});    // Visual for ZMP Reference
   ////////////////////////////// JY CODE ////////////////////////////// 
   /////////////////////////////////////////////////////////////////////
 
